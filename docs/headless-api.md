@@ -62,24 +62,13 @@ reverse-proxied deployment:
 - `Remote-Link.cmd` starts a temporary Cloudflare tunnel, but it does not store
   a persistent public app URL.
 
-Headless public app metadata can be kept in `config.yaml`:
+Keep deployment-specific public addresses, ports, and FRP credentials out of
+`config.yaml`. The regular config keys can be overridden from `.env.local`:
 
-```yaml
-headless:
-  remoteApp:
-    enabled: true
-    publicUrl: "https://st.example.com"
-    proxyTarget: "http://127.0.0.1:8000"
-    appPath: "/headless/"
-    apiPath: "/api/headless/v1"
-    assetPaths:
-      - "/thumbnail"
-      - "/characters"
-      - "/backgrounds"
-      - "/csrf-token"
-      - "/login"
-      - "/api/users"
-    healthPath: "/api/headless/v1/bootstrap"
+```dotenv
+SILLYTAVERN_HEADLESS_REMOTEAPP_ENABLED=true
+SILLYTAVERN_HEADLESS_REMOTEAPP_PUBLICURL=https://st.example.com
+SILLYTAVERN_HEADLESS_REMOTEAPP_PROXYTARGET=http://127.0.0.1:8000
 ```
 
 This metadata is returned by `/api/headless/v1/bootstrap` and is printed by the
@@ -126,6 +115,35 @@ location /api/users/ {
 Use HTTPS and keep SillyTavern's normal authentication controls enabled when
 exposing the proxy outside a trusted network.
 
+## FRP
+
+`frpc.headless.toml` is a template that reads all deployment values from
+environment variables. Use `.env.local.example` as the empty local template and
+fill `.env.local` on the machine that runs the tunnel:
+
+```dotenv
+FRP_SERVER_ADDR=
+FRP_SERVER_PORT=
+FRP_AUTH_TOKEN=
+FRP_PROXY_NAME=sillytavern-headless
+FRP_LOCAL_IP=127.0.0.1
+FRP_LOCAL_PORT=8000
+FRP_REMOTE_PORT=
+```
+
+Start the client through the wrapper so `.env.local` is loaded before `frpc`
+parses the template:
+
+```bash
+npm run run_frpc
+```
+
+To validate the rendered FRP config without connecting:
+
+```bash
+npm run run_frpc -- verify
+```
+
 ## Running
 
 Use the normal server entry point or the headless-aware wrapper:
@@ -135,8 +153,8 @@ npm run run_server
 ```
 
 The wrapper uses the same config initialization and command-line arguments as
-`server.js`, then logs `headless.remoteApp` before starting the server. Arguments
-are passed through, for example:
+`server.js`, loads `.env.local`, then logs `headless.remoteApp` before starting
+the server. Arguments are passed through, for example:
 
 ```bash
 npm run run_server -- --port 8010 --listen

@@ -54,6 +54,8 @@ public/scripts/extensions/third-party
 /certs
 .aider*
 .env
+.env.local
+/.tools/
 /StartDev.bat
 yarn.lock
 *.code-workspace

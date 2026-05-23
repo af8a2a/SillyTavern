@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { CommandLineParser } from './src/command-line.js';
+import { loadLocalEnvFiles } from './src/env-local.js';
 import { serverDirectory } from './src/server-directory.js';
+
+loadLocalEnvFiles(serverDirectory);
 
 console.log(`Node version: ${process.version}. Running in ${process.env.NODE_ENV} environment. Server directory: ${serverDirectory}`);
 

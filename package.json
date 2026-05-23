@@ -120,6 +120,7 @@
         "init": "node src/server-init.js",
         "start": "node server.js",
         "run_server": "node run_server.js",
+        "run_frpc": "node run_frpc.js",
         "debug": "node --inspect server.js",
         "start:global": "node server.js --global",
         "start:electron": "cd ./src/electron && npm run start",

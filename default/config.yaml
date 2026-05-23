@@ -110,10 +110,13 @@ headless:
   # in the same config flow as the rest of the server.
   remoteApp:
     # Enable logging and API exposure of the remote app metadata.
+    # Can also be set with SILLYTAVERN_HEADLESS_REMOTEAPP_ENABLED in .env.local.
     enabled: false
     # Canonical public URL of your custom app or reverse proxy, for example "https://st.example.com".
+    # Keep deployment-specific values in SILLYTAVERN_HEADLESS_REMOTEAPP_PUBLICURL.
     publicUrl: ""
     # Local URL that the reverse proxy should forward to.
+    # Keep deployment-specific values in SILLYTAVERN_HEADLESS_REMOTEAPP_PROXYTARGET.
     proxyTarget: "http://127.0.0.1:8000"
     # Public path for the installable headless app.
     appPath: "/headless/"

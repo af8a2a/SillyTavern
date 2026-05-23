@@ -1,0 +1,11 @@
+serverAddr = "{{ .Envs.FRP_SERVER_ADDR }}"
+serverPort = {{ .Envs.FRP_SERVER_PORT }}
+
+auth.token = "{{ .Envs.FRP_AUTH_TOKEN }}"
+
+[[proxies]]
+name = "{{ .Envs.FRP_PROXY_NAME }}"
+type = "tcp"
+localIP = "{{ .Envs.FRP_LOCAL_IP }}"
+localPort = {{ .Envs.FRP_LOCAL_PORT }}
+remotePort = {{ .Envs.FRP_REMOTE_PORT }}
