@@ -50,6 +50,42 @@ If user accounts are enabled and the client is not logged in, the API returns
 
 ## Reverse Proxy
 
+Existing SillyTavern configuration already has the building blocks needed for a
+reverse-proxied deployment:
+
+- `listen`, `listenAddress`, and `port` control local bind behavior.
+- `hostWhitelist.hosts` allows public proxy hostnames.
+- `forwardedHeaders` and `sso.trustedProxies` support reverse-proxy client IP
+  and SSO flows.
+- `requestProxy` is only for outgoing HTTP/HTTPS requests from SillyTavern. It
+  is not an incoming reverse-proxy target.
+- `Remote-Link.cmd` starts a temporary Cloudflare tunnel, but it does not store
+  a persistent public app URL.
+
+Headless public app metadata can be kept in `config.yaml`:
+
+```yaml
+headless:
+  remoteApp:
+    enabled: true
+    publicUrl: "https://st.example.com"
+    proxyTarget: "http://127.0.0.1:8000"
+    appPath: "/headless/"
+    apiPath: "/api/headless/v1"
+    assetPaths:
+      - "/thumbnail"
+      - "/characters"
+      - "/backgrounds"
+      - "/csrf-token"
+      - "/login"
+      - "/api/users"
+    healthPath: "/api/headless/v1/bootstrap"
+```
+
+This metadata is returned by `/api/headless/v1/bootstrap` and is printed by the
+`run_server` script. It does not start nginx, Caddy, Cloudflare Tunnel, or any
+other proxy process by itself.
+
 For same-origin public deployment, proxy the public app and API paths to the
 local SillyTavern server. A minimal nginx shape:
 
@@ -89,6 +125,22 @@ location /api/users/ {
 
 Use HTTPS and keep SillyTavern's normal authentication controls enabled when
 exposing the proxy outside a trusted network.
+
+## Running
+
+Use the normal server entry point or the headless-aware wrapper:
+
+```bash
+npm run run_server
+```
+
+The wrapper uses the same config initialization and command-line arguments as
+`server.js`, then logs `headless.remoteApp` before starting the server. Arguments
+are passed through, for example:
+
+```bash
+npm run run_server -- --port 8010 --listen
+```
 
 ## Endpoints
 

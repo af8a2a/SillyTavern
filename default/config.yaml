@@ -103,6 +103,32 @@ requestProxy:
   bypass:
     - localhost
     - 127.0.0.1
+# -- HEADLESS APP CONFIGURATION --
+headless:
+  # Metadata for a custom public web/app frontend that reverse proxies to this SillyTavern instance.
+  # This does not start a tunnel or proxy by itself; use it to keep external deployment details
+  # in the same config flow as the rest of the server.
+  remoteApp:
+    # Enable logging and API exposure of the remote app metadata.
+    enabled: false
+    # Canonical public URL of your custom app or reverse proxy, for example "https://st.example.com".
+    publicUrl: ""
+    # Local URL that the reverse proxy should forward to.
+    proxyTarget: "http://127.0.0.1:8000"
+    # Public path for the installable headless app.
+    appPath: "/headless/"
+    # Public path for the headless API.
+    apiPath: "/api/headless/v1"
+    # Extra paths the public app needs for media and authentication.
+    assetPaths:
+      - "/thumbnail"
+      - "/characters"
+      - "/backgrounds"
+      - "/csrf-token"
+      - "/login"
+      - "/api/users"
+    # Health/readiness path for reverse proxies and deployment checks.
+    healthPath: "/api/headless/v1/bootstrap"
 # Enable multi-user mode
 enableUserAccounts: false
 # Enable discreet login mode: hides user list on the login screen

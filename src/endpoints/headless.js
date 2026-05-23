@@ -8,6 +8,7 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { processCharacter, mergeCharacterUpdate } from './characters.js';
 import { getChatData, getChatInfo, trySaveChat } from './chats.js';
 import { readWorldInfoFile } from './worldinfo.js';
+import { getHeadlessRemoteConfig } from '../headless-config.js';
 import { getImages, humanizedDateTime, isPathUnderParent, tryDeleteFile, tryParse } from '../util.js';
 
 export const router = express.Router();
@@ -305,6 +306,8 @@ async function readWorlds(directories) {
 }
 
 router.get('/bootstrap', asyncRoute(async (request, response) => {
+    const remoteApp = getHeadlessRemoteConfig();
+
     response.json({
         version: HEADLESS_API_VERSION,
         user: {
@@ -312,6 +315,7 @@ router.get('/bootstrap', asyncRoute(async (request, response) => {
             name: request.user.profile.name,
             avatar: request.user.profile.avatar,
         },
+        remoteApp,
         urls: {
             app: '/headless/',
             csrf: '/csrf-token',
