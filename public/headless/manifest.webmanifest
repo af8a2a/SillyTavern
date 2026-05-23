@@ -1,0 +1,22 @@
+{
+    "name": "SillyTavern Headless",
+    "short_name": "ST Headless",
+    "description": "Installable cross-platform client for SillyTavern headless APIs.",
+    "start_url": "/headless/",
+    "scope": "/headless/",
+    "display": "standalone",
+    "background_color": "#f5f7f2",
+    "theme_color": "#17201c",
+    "icons": [
+        {
+            "src": "/img/apple-icon-144x144.png",
+            "sizes": "144x144",
+            "type": "image/png"
+        },
+        {
+            "src": "/img/apple-icon-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

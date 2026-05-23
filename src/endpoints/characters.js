@@ -403,7 +403,7 @@ const toShallow = (character) => {
  * @param  {boolean} options.shallow If true, only return the core character's metadata
  * @return {Promise<object>}     A Promise that resolves when the character processing is done.
  */
-const processCharacter = async (item, directories, { shallow }) => {
+export const processCharacter = async (item, directories, { shallow }) => {
     try {
         const imgFile = path.join(directories.characters, item);
         const imgData = await readCharacterData(imgFile);
@@ -1271,7 +1271,7 @@ function processUnsetSentinels(target, source) {
  * @param {((data: any) => boolean) | null} [shouldSkip] Optional function to determine if a character should be skipped based on its original data (used for bulk merge filtering)
  * @returns {Promise<{ok: boolean, error?: string, skipped?: boolean}>} Result of the merge operation, including any validation error
  */
-async function mergeCharacterUpdate(avatarPath, avatar, updateData, request, shouldSkip = null) {
+export async function mergeCharacterUpdate(avatarPath, avatar, updateData, request, shouldSkip = null) {
     const pngStringData = await readCharacterData(avatarPath);
     if (!pngStringData) {
         return { ok: false, error: 'Invalid character file' };

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#17201c">
+    <meta name="robots" content="noindex, nofollow">
+    <title>SillyTavern Headless</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="/favicon.ico">
+    <link href="/css/fontawesome.min.css" rel="stylesheet">
+    <link href="/css/solid.min.css" rel="stylesheet">
+    <link href="styles.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-shell">
+        <aside class="sidebar" aria-label="Library">
+            <header class="brandbar">
+                <img src="/img/logo.png" alt="" class="brandmark">
+                <div>
+                    <h1>SillyTavern Headless</h1>
+                    <p id="userLine">Connecting</p>
+                </div>
+            </header>
+
+            <label class="searchbox">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                <input id="characterSearch" type="search" autocomplete="off" placeholder="Search characters">
+            </label>
+
+            <div id="characterList" class="character-list" aria-live="polite"></div>
+        </aside>
+
+        <main class="workspace">
+            <header class="topbar">
+                <div class="selected-title">
+                    <img id="selectedAvatar" src="/img/No-Image-Placeholder.svg" alt="" class="selected-avatar">
+                    <div>
+                        <p id="selectedKicker">Character card</p>
+                        <h2 id="selectedName">No character selected</h2>
+                    </div>
+                </div>
+                <div class="toolbar" aria-label="Actions">
+                    <button type="button" class="icon-button" data-action="reload" title="Refresh library" aria-label="Refresh library">
+                        <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" class="icon-button" data-action="new-chat" title="New chat" aria-label="New chat">
+                        <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" class="primary-button" data-action="save-character">
+                        <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+                        <span>Save card</span>
+                    </button>
+                </div>
+            </header>
+
+            <section class="main-grid">
+                <section class="editor-surface" aria-label="Character editor">
+                    <div class="tabs" role="tablist" aria-label="Character sections">
+                        <button type="button" class="tab-button active" data-tab="card" role="tab">Card</button>
+                        <button type="button" class="tab-button" data-tab="prompts" role="tab">Prompts</button>
+                        <button type="button" class="tab-button" data-tab="extensions" role="tab">Extensions</button>
+                        <button type="button" class="tab-button" data-tab="assets" role="tab">Assets</button>
+                    </div>
+                    <form id="characterForm" class="character-form"></form>
+                </section>
+
+                <section class="chat-surface" aria-label="Chats">
+                    <div class="chat-header">
+                        <div>
+                            <p>Chats</p>
+                            <h3 id="chatTitle">No chat loaded</h3>
+                        </div>
+                        <button type="button" class="icon-button" data-action="save-chat" title="Save chat" aria-label="Save chat">
+                            <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    <div id="chatList" class="chat-list"></div>
+                    <div id="messageList" class="message-list"></div>
+                    <div class="composer-actions">
+                        <button type="button" class="secondary-button" data-action="add-user-message">
+                            <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
+                            <span>User</span>
+                        </button>
+                        <button type="button" class="secondary-button" data-action="add-assistant-message">
+                            <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+                            <span>Assistant</span>
+                        </button>
+                    </div>
+                </section>
+            </section>
+        </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js" type="module"></script>
+</body>
+
+</html>
