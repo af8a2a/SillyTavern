@@ -7,11 +7,15 @@ This first pass focuses on data compatibility with the existing server:
 - Configure a backend URL directly in the app.
 - Load bootstrap, library, model provider metadata, characters, chats, and pages
   of chat messages from `/api/headless/v1`.
-- Switch model provider/source/model settings through the headless settings API.
+- Load server preset model provider settings, while saving mobile provider
+  overrides locally on the device.
+- Configure OpenAI-compatible endpoints in the app, including base URL, API key,
+  model fetch from `/models`, connection testing, and a small test message.
 - Switch character cards and edit common TavernCard front-end fields.
 - Manage character chat files by date and size, delete old files, and create
   branches from any loaded message.
-- Keep only small local cache values such as the backend URL and last selection.
+- Keep only small local cache values such as the backend URL, model provider,
+  and last selection. API keys are stored with the platform secure storage.
 
 ## Running
 

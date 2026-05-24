@@ -178,9 +178,17 @@ GET /api/headless/v1/providers
 PATCH /api/headless/v1/providers/current
 ```
 
-The providers endpoint exposes the current SillyTavern model selection and a
-mobile-friendly provider/source catalog. `PATCH` updates the existing
-`settings.json` fields used by the web UI, for example:
+The providers endpoint exposes the server preset SillyTavern model selection
+and a mobile-friendly provider/source catalog. Frontends should treat
+`server_preset` as a default and store per-device or per-user overrides in
+their own local configuration instead of mutating SillyTavern's `settings.json`.
+For OpenAI-compatible custom frontends, this local override can include the
+base URL, API key, selected model, fetched model list, and connection-test
+state; the headless endpoint only advertises the catalog and server preset.
+
+`current` is kept as a backwards-compatible alias of `server_preset`.
+`PATCH` remains available for legacy/admin clients that intentionally update the
+existing `settings.json` fields used by the web UI, for example:
 
 ```json
 {

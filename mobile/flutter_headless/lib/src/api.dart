@@ -197,16 +197,6 @@ class HeadlessApi {
     return ProviderCatalog.fromJson(json);
   }
 
-  Future<ProviderCatalog> setProvider(ProviderSelection selection) async {
-    final json = await patchJson('/api/headless/v1/providers/current', {
-      'provider': selection.provider,
-      'source': selection.source,
-      'model': selection.model,
-      'stream': selection.stream,
-    });
-    return ProviderCatalog.fromJson(json);
-  }
-
   Future<Map<String, dynamic>> getJson(String path,
       [Map<String, String?> query = const <String, String?>{}]) async {
     final response = await http.get(uri(path, query), headers: _headers());
@@ -290,5 +280,130 @@ class HeadlessApi {
     return trimmed.endsWith('/')
         ? trimmed.substring(0, trimmed.length - 1)
         : trimmed;
+  }
+}
+
+class OpenAiCompatibleApi {
+  const OpenAiCompatibleApi._();
+
+  static Future<List<String>> fetchModels({
+    required String baseUrl,
+    required String apiKey,
+  }) async {
+    final response = await http
+        .get(
+          _uri(baseUrl, '/models'),
+          headers: _headers(apiKey),
+        )
+        .timeout(const Duration(seconds: 20));
+    final json = _decodeExternal(response);
+    final models = listOfMaps(json['data'])
+        .map((item) => stringOf(item['id']))
+        .where((id) => id.isNotEmpty)
+        .toList()
+      ..sort();
+
+    if (models.isEmpty) {
+      throw const HeadlessApiException('没有从 /models 获取到可用模型');
+    }
+
+    return models;
+  }
+
+  static Future<String> testConnection({
+    required String baseUrl,
+    required String apiKey,
+  }) async {
+    final models = await fetchModels(baseUrl: baseUrl, apiKey: apiKey);
+    return '连接成功，获取到 ${models.length} 个模型';
+  }
+
+  static Future<String> sendTestMessage({
+    required String baseUrl,
+    required String apiKey,
+    required String model,
+  }) async {
+    if (model.trim().isEmpty) {
+      throw const HeadlessApiException('请先选择或输入模型名');
+    }
+
+    final response = await http
+        .post(
+          _uri(baseUrl, '/chat/completions'),
+          headers: {
+            ..._headers(apiKey),
+            'content-type': 'application/json',
+          },
+          body: jsonEncode({
+            'model': model.trim(),
+            'messages': [
+              {'role': 'user', 'content': 'Reply with OK.'},
+            ],
+            'max_tokens': 8,
+            'stream': false,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
+    final json = _decodeExternal(response);
+    final choices = listOfMaps(json['choices']);
+    final first = choices.isEmpty ? <String, dynamic>{} : choices.first;
+    final message = asMap(first['message']);
+    final content = stringOf(message['content'],
+        fallback: stringOf(first['text'], fallback: '测试消息发送成功'));
+    return content.trim().isEmpty ? '测试消息发送成功' : content.trim();
+  }
+
+  static Uri _uri(String baseUrl, String suffix) {
+    final trimmed = baseUrl.trim();
+    if (trimmed.isEmpty) {
+      throw const HeadlessApiException('请先填写自定义端点');
+    }
+
+    final withScheme = trimmed.contains('://') ? trimmed : 'https://$trimmed';
+    final parsed = Uri.parse(withScheme);
+    var path = parsed.path.replaceAll(RegExp(r'/+$'), '');
+
+    if (path.endsWith('/chat/completions')) {
+      path = path.substring(0, path.length - '/chat/completions'.length);
+    }
+    if (path.endsWith('/models')) {
+      path = path.substring(0, path.length - '/models'.length);
+    }
+    if (path.isEmpty) {
+      path = '/v1';
+    }
+
+    final nextPath = '$path$suffix'.replaceAll(RegExp(r'//+'), '/');
+    return parsed.replace(path: nextPath, queryParameters: null);
+  }
+
+  static Map<String, String> _headers(String apiKey) {
+    return {
+      'accept': 'application/json',
+      if (apiKey.trim().isNotEmpty) 'authorization': 'Bearer ${apiKey.trim()}',
+    };
+  }
+
+  static Map<String, dynamic> _decodeExternal(http.Response response) {
+    final text = utf8.decode(response.bodyBytes);
+    final decoded = text.isEmpty ? <String, dynamic>{} : jsonDecode(text);
+    final json = decoded is Map
+        ? Map<String, dynamic>.from(decoded)
+        : <String, dynamic>{};
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final error = asMap(json['error']);
+      throw HeadlessApiException(
+        stringOf(error['message'],
+            fallback:
+                '请求失败：HTTP ${response.statusCode}${text.isEmpty ? '' : ' $text'}'),
+      );
+    }
+
+    if (decoded is! Map) {
+      throw const HeadlessApiException('Unexpected API response');
+    }
+
+    return json;
   }
 }

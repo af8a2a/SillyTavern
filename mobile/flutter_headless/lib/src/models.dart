@@ -277,6 +277,9 @@ class ProviderSelection {
     required this.model,
     required this.stream,
     required this.modelKey,
+    required this.apiBaseUrl,
+    required this.apiKey,
+    required this.availableModels,
   });
 
   factory ProviderSelection.fromJson(Map<String, dynamic> json) {
@@ -286,6 +289,9 @@ class ProviderSelection {
       model: stringOf(json['model']),
       stream: json['stream'] == true,
       modelKey: stringOf(json['modelKey']),
+      apiBaseUrl: stringOf(json['apiBaseUrl']),
+      apiKey: stringOf(json['apiKey']),
+      availableModels: listOfStrings(json['availableModels']),
     );
   }
 
@@ -294,24 +300,76 @@ class ProviderSelection {
   final String model;
   final bool stream;
   final String modelKey;
+  final String apiBaseUrl;
+  final String apiKey;
+  final List<String> availableModels;
+
+  ProviderSelection copyWith({
+    String? provider,
+    String? source,
+    String? model,
+    bool? stream,
+    String? modelKey,
+    String? apiBaseUrl,
+    String? apiKey,
+    List<String>? availableModels,
+  }) {
+    return ProviderSelection(
+      provider: provider ?? this.provider,
+      source: source ?? this.source,
+      model: model ?? this.model,
+      stream: stream ?? this.stream,
+      modelKey: modelKey ?? this.modelKey,
+      apiBaseUrl: apiBaseUrl ?? this.apiBaseUrl,
+      apiKey: apiKey ?? this.apiKey,
+      availableModels: availableModels ?? this.availableModels,
+    );
+  }
+
+  Map<String, dynamic> toJson({bool includeApiKey = true}) {
+    return {
+      'provider': provider,
+      'source': source,
+      'model': model,
+      'stream': stream,
+      'modelKey': modelKey,
+      'apiBaseUrl': apiBaseUrl,
+      if (includeApiKey) 'apiKey': apiKey,
+      'availableModels': availableModels,
+    };
+  }
 }
 
 class ProviderCatalog {
   const ProviderCatalog({
     required this.current,
+    required this.serverPreset,
     required this.providers,
   });
 
   factory ProviderCatalog.fromJson(Map<String, dynamic> json) {
+    final current = ProviderSelection.fromJson(asMap(json['current']));
+    final presetJson = asMap(json['server_preset']);
     return ProviderCatalog(
-      current: ProviderSelection.fromJson(asMap(json['current'])),
+      current: current,
+      serverPreset:
+          presetJson.isEmpty ? current : ProviderSelection.fromJson(presetJson),
       providers:
           listOfMaps(json['providers']).map(ProviderOption.fromJson).toList(),
     );
   }
 
   final ProviderSelection current;
+  final ProviderSelection serverPreset;
   final List<ProviderOption> providers;
+
+  ProviderCatalog copyWith({ProviderSelection? current}) {
+    return ProviderCatalog(
+      current: current ?? this.current,
+      serverPreset: serverPreset,
+      providers: providers,
+    );
+  }
 }
 
 Map<String, dynamic> asMap(Object? value) {

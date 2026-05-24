@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+import 'src/api.dart';
 import 'src/app_state.dart';
 import 'src/models.dart';
 
@@ -569,6 +570,9 @@ class Composer extends StatelessWidget {
                         model: current.model,
                         stream: !current.stream,
                         modelKey: current.modelKey,
+                        apiBaseUrl: current.apiBaseUrl,
+                        apiKey: current.apiKey,
+                        availableModels: current.availableModels,
                       ),
                     );
                   }
@@ -955,16 +959,28 @@ void showCharacterSwitcher(BuildContext context, AppState state) {
 
 void showProviderSheet(BuildContext context, AppState state) {
   final catalog = state.providerCatalog;
-  final current = catalog?.current;
+  final current = state.currentProvider;
   if (catalog == null || current == null) {
     return;
   }
+  final serverPreset = state.serverPresetProvider;
 
   var provider = current.provider;
   var source = current.source;
   var model = current.model;
   var stream = current.stream;
   final modelController = TextEditingController(text: model);
+  final endpointController = TextEditingController(
+    text: current.apiBaseUrl.isNotEmpty
+        ? current.apiBaseUrl
+        : defaultOpenAiCompatibleBaseUrl(current.source),
+  );
+  final apiKeyController = TextEditingController(text: current.apiKey);
+  var availableModels = uniqueStrings(current.availableModels);
+  var providerBusy = false;
+  var providerStatus = '';
+  var providerStatusError = false;
+  var obscureApiKey = true;
 
   showModalBottomSheet<void>(
     context: context,
@@ -981,8 +997,108 @@ void showProviderSheet(BuildContext context, AppState state) {
           if (sources.isNotEmpty && !sources.contains(source)) {
             source = sources.first;
           }
+          final supportsOpenAiConfig = supportsOpenAiCompatibleConfig(provider);
+          final selectedModel = modelController.text.trim();
+          final availableModelItems = uniqueStrings(availableModels);
+          final selectedAvailableModel =
+              availableModelItems.contains(selectedModel)
+                  ? selectedModel
+                  : null;
 
-          return Padding(
+          void setProviderStatus(String value, {bool isError = false}) {
+            setModalState(() {
+              providerStatus = value;
+              providerStatusError = isError;
+            });
+          }
+
+          Future<void> fetchAvailableModels() async {
+            setModalState(() {
+              providerBusy = true;
+              providerStatus = '正在获取模型列表...';
+              providerStatusError = false;
+            });
+            try {
+              final models = await OpenAiCompatibleApi.fetchModels(
+                baseUrl: endpointController.text,
+                apiKey: apiKeyController.text,
+              );
+              if (!context.mounted) {
+                return;
+              }
+              setModalState(() {
+                availableModels = models;
+                if (modelController.text.trim().isEmpty && models.isNotEmpty) {
+                  modelController.text = models.first;
+                  model = models.first;
+                }
+                providerStatus = '已获取 ${models.length} 个模型';
+                providerStatusError = false;
+              });
+            } catch (exception) {
+              if (!context.mounted) {
+                return;
+              }
+              setProviderStatus(exception.toString(), isError: true);
+            } finally {
+              if (context.mounted) {
+                setModalState(() => providerBusy = false);
+              }
+            }
+          }
+
+          Future<void> testProviderConnection() async {
+            setModalState(() {
+              providerBusy = true;
+              providerStatus = '正在连接...';
+              providerStatusError = false;
+            });
+            try {
+              final message = await OpenAiCompatibleApi.testConnection(
+                baseUrl: endpointController.text,
+                apiKey: apiKeyController.text,
+              );
+              if (context.mounted) {
+                setProviderStatus(message);
+              }
+            } catch (exception) {
+              if (context.mounted) {
+                setProviderStatus(exception.toString(), isError: true);
+              }
+            } finally {
+              if (context.mounted) {
+                setModalState(() => providerBusy = false);
+              }
+            }
+          }
+
+          Future<void> sendProviderTestMessage() async {
+            setModalState(() {
+              providerBusy = true;
+              providerStatus = '正在发送测试消息...';
+              providerStatusError = false;
+            });
+            try {
+              final message = await OpenAiCompatibleApi.sendTestMessage(
+                baseUrl: endpointController.text,
+                apiKey: apiKeyController.text,
+                model: modelController.text,
+              );
+              if (context.mounted) {
+                setProviderStatus('测试消息返回：$message');
+              }
+            } catch (exception) {
+              if (context.mounted) {
+                setProviderStatus(exception.toString(), isError: true);
+              }
+            } finally {
+              if (context.mounted) {
+                setModalState(() => providerBusy = false);
+              }
+            }
+          }
+
+          return SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
                 20, 0, 20, MediaQuery.of(context).viewInsets.bottom + 20),
             child: Column(
@@ -992,8 +1108,23 @@ void showProviderSheet(BuildContext context, AppState state) {
                 const Text('模型供应商',
                     style:
                         TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(
+                  '当前配置保存在本机，不会修改服务端预设。',
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+                if (serverPreset != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '服务端预设：${providerLabel(serverPreset)}',
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
+                  key: const ValueKey('provider'),
                   initialValue: provider,
                   decoration: const InputDecoration(
                       labelText: 'Provider', border: OutlineInputBorder()),
@@ -1008,11 +1139,20 @@ void showProviderSheet(BuildContext context, AppState state) {
                     source = nextProvider.sources.isEmpty
                         ? ''
                         : nextProvider.sources.first;
+                    final nextBaseUrl = defaultOpenAiCompatibleBaseUrl(source);
+                    if (endpointController.text.trim().isEmpty ||
+                        !supportsOpenAiConfig) {
+                      endpointController.text = nextBaseUrl;
+                    }
+                    availableModels = <String>[];
+                    providerStatus = '';
+                    providerStatusError = false;
                   }),
                 ),
                 const SizedBox(height: 12),
                 if (sources.isNotEmpty)
                   DropdownButtonFormField<String>(
+                    key: ValueKey('source-$provider'),
                     initialValue: source,
                     decoration: const InputDecoration(
                         labelText: 'Source', border: OutlineInputBorder()),
@@ -1020,16 +1160,144 @@ void showProviderSheet(BuildContext context, AppState state) {
                         .map((item) =>
                             DropdownMenuItem(value: item, child: Text(item)))
                         .toList(),
-                    onChanged: (value) =>
-                        setModalState(() => source = value ?? source),
+                    onChanged: (value) => setModalState(() {
+                      final previousDefault =
+                          defaultOpenAiCompatibleBaseUrl(source);
+                      source = value ?? source;
+                      final nextDefault =
+                          defaultOpenAiCompatibleBaseUrl(source);
+                      if (endpointController.text.trim().isEmpty ||
+                          endpointController.text.trim() == previousDefault) {
+                        endpointController.text = nextDefault;
+                      }
+                      availableModels = <String>[];
+                      providerStatus = '';
+                      providerStatusError = false;
+                    }),
                   ),
                 const SizedBox(height: 12),
+                if (supportsOpenAiConfig) ...[
+                  const Text('OpenAI 兼容参数',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: endpointController,
+                    keyboardType: TextInputType.url,
+                    decoration: const InputDecoration(
+                      labelText: '自定义端点（基础 URL）',
+                      hintText: '例如：http://localhost:1234/v1',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) => setModalState(() => providerStatus = ''),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: apiKeyController,
+                    obscureText: obscureApiKey,
+                    keyboardType: TextInputType.visiblePassword,
+                    decoration: InputDecoration(
+                      labelText: '自定义 API 密钥（可选）',
+                      hintText: '缺少密钥',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        tooltip: obscureApiKey ? '显示密钥' : '隐藏密钥',
+                        onPressed: () =>
+                            setModalState(() => obscureApiKey = !obscureApiKey),
+                        icon: Icon(obscureApiKey
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined),
+                      ),
+                    ),
+                    onChanged: (_) => setModalState(() => providerStatus = ''),
+                  ),
+                  const SizedBox(height: 12),
+                  if (availableModelItems.isNotEmpty) ...[
+                    DropdownButtonFormField<String>(
+                      key: ValueKey(
+                          'available-models-${availableModelItems.length}'),
+                      initialValue: selectedAvailableModel,
+                      decoration: const InputDecoration(
+                        labelText: '可用模型',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: availableModelItems
+                          .map((item) =>
+                              DropdownMenuItem(value: item, child: Text(item)))
+                          .toList(),
+                      onChanged: (value) => setModalState(() {
+                        if (value != null) {
+                          modelController.text = value;
+                          model = value;
+                        }
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ],
                 TextField(
                   controller: modelController,
                   decoration: const InputDecoration(
-                      labelText: 'Model ID', border: OutlineInputBorder()),
+                    labelText: '输入模型名',
+                    hintText: '例如：gpt-4o',
+                    border: OutlineInputBorder(),
+                  ),
                   onChanged: (value) => model = value,
                 ),
+                if (supportsOpenAiConfig) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: providerBusy ? null : testProviderConnection,
+                        icon: const Icon(Icons.power_settings_new),
+                        label: const Text('连接测试'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: providerBusy ? null : fetchAvailableModels,
+                        icon: const Icon(Icons.cloud_download_outlined),
+                        label: const Text('获取模型'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed:
+                            providerBusy ? null : sendProviderTestMessage,
+                        icon: const Icon(Icons.send_outlined),
+                        label: const Text('发送测试消息'),
+                      ),
+                    ],
+                  ),
+                  if (providerStatus.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          providerStatusError
+                              ? Icons.error_outline
+                              : Icons.check_circle,
+                          color: providerStatusError
+                              ? Theme.of(context).colorScheme.error
+                              : const Color(0xff168422),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            providerStatus,
+                            style: TextStyle(
+                              color: providerStatusError
+                                  ? Theme.of(context).colorScheme.error
+                                  : Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('流式输出'),
@@ -1037,23 +1305,53 @@ void showProviderSheet(BuildContext context, AppState state) {
                   onChanged: (value) => setModalState(() => stream = value),
                 ),
                 const SizedBox(height: 8),
-                FilledButton.icon(
-                  onPressed: () async {
-                    await state.updateProvider(
-                      ProviderSelection(
-                        provider: provider,
-                        source: source,
-                        model: modelController.text.trim(),
-                        stream: stream,
-                        modelKey: current.modelKey,
+                Row(
+                  children: [
+                    if (state.hasLocalProviderOverride) ...[
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            await state.useServerPresetProvider();
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                            }
+                          },
+                          icon: const Icon(Icons.settings_backup_restore),
+                          label: const Text('使用服务端预设'),
+                        ),
                       ),
-                    );
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                    }
-                  },
-                  icon: const Icon(Icons.check),
-                  label: const Text('应用'),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () async {
+                          await state.updateProvider(
+                            ProviderSelection(
+                              provider: provider,
+                              source: source,
+                              model: modelController.text.trim(),
+                              stream: stream,
+                              modelKey: current.modelKey,
+                              apiBaseUrl: supportsOpenAiConfig
+                                  ? endpointController.text.trim()
+                                  : '',
+                              apiKey: supportsOpenAiConfig
+                                  ? apiKeyController.text.trim()
+                                  : '',
+                              availableModels: supportsOpenAiConfig
+                                  ? uniqueStrings(availableModels)
+                                  : <String>[],
+                            ),
+                          );
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                          }
+                        },
+                        icon: const Icon(Icons.check),
+                        label: const Text('保存到本机'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1061,7 +1359,11 @@ void showProviderSheet(BuildContext context, AppState state) {
         },
       );
     },
-  ).whenComplete(modelController.dispose);
+  ).whenComplete(() {
+    modelController.dispose();
+    endpointController.dispose();
+    apiKeyController.dispose();
+  });
 }
 
 void showSwipeSheet(
@@ -1189,6 +1491,37 @@ BoxDecoration panelDecoration({bool selected = false}) {
       BoxShadow(color: Color(0x0a000000), blurRadius: 10, offset: Offset(0, 4))
     ],
   );
+}
+
+bool supportsOpenAiCompatibleConfig(String provider) => provider == 'openai';
+
+String defaultOpenAiCompatibleBaseUrl(String source) {
+  const endpoints = {
+    'openai': 'https://api.openai.com/v1',
+    'openrouter': 'https://openrouter.ai/api/v1',
+    'mistralai': 'https://api.mistral.ai/v1',
+    'perplexity': 'https://api.perplexity.ai',
+    'groq': 'https://api.groq.com/openai/v1',
+    'chutes': 'https://llm.chutes.ai/v1',
+    'deepseek': 'https://api.deepseek.com/v1',
+    'aimlapi': 'https://api.aimlapi.com/v1',
+    'xai': 'https://api.x.ai/v1',
+    'moonshot': 'https://api.moonshot.cn/v1',
+    'fireworks': 'https://api.fireworks.ai/inference/v1',
+    'cometapi': 'https://api.cometapi.com/v1',
+    'zai': 'https://api.z.ai/api/paas/v4',
+    'siliconflow': 'https://api.siliconflow.cn/v1',
+    'minimax': 'https://api.minimax.chat/v1',
+  };
+  return endpoints[source] ?? '';
+}
+
+List<String> uniqueStrings(Iterable<String> values) {
+  final seen = <String>{};
+  return [
+    for (final value in values)
+      if (value.trim().isNotEmpty && seen.add(value.trim())) value.trim(),
+  ];
 }
 
 String providerLabel(ProviderSelection? provider) {

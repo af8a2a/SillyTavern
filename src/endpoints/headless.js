@@ -588,15 +588,17 @@ router.get('/bootstrap', asyncRoute(async (request, response) => {
             groups: ['list', 'get', 'get-chat', 'replace-chat'],
             worlds: ['list', 'get', 'replace', 'delete'],
             backgrounds: ['list'],
-            providers: ['list', 'current', 'switch'],
+            providers: ['list', 'server-preset'],
         },
     });
 }));
 
 router.get('/providers', asyncRoute(async (request, response) => {
     const settings = readUserSettings(request.user.directories);
+    const serverPreset = getCurrentProviderSelection(settings);
     response.json({
-        current: getCurrentProviderSelection(settings),
+        current: serverPreset,
+        server_preset: serverPreset,
         providers: PROVIDERS,
     });
 }));
@@ -608,6 +610,7 @@ router.patch('/providers/current', asyncRoute(async (request, response) => {
     response.json({
         ok: true,
         current,
+        server_preset: current,
         providers: PROVIDERS,
     });
 }));
