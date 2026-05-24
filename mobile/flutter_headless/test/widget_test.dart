@@ -75,6 +75,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('OpenAI 兼容参数'), findsOneWidget);
+    expect(find.text('使用服务端模型提供商'), findsOneWidget);
     expect(find.text('自定义端点（基础 URL）'), findsOneWidget);
     expect(find.text('自定义 API 密钥（可选）'), findsOneWidget);
     expect(find.text('可用模型'), findsOneWidget);

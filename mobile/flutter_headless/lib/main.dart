@@ -981,6 +981,9 @@ void showProviderSheet(BuildContext context, AppState state) {
   var providerStatus = '';
   var providerStatusError = false;
   var obscureApiKey = true;
+  var useServerProvider = current.provider == 'openai' &&
+      current.apiBaseUrl.trim().isEmpty &&
+      current.apiKey.trim().isEmpty;
 
   showModalBottomSheet<void>(
     context: context,
@@ -1005,6 +1008,27 @@ void showProviderSheet(BuildContext context, AppState state) {
                   ? selectedModel
                   : null;
 
+          ProviderSelection providerDraft() {
+            final supportsDraftOpenAiConfig =
+                supportsOpenAiCompatibleConfig(provider);
+            return ProviderSelection(
+              provider: provider,
+              source: source,
+              model: modelController.text.trim(),
+              stream: stream,
+              modelKey: current.modelKey,
+              apiBaseUrl: !supportsDraftOpenAiConfig || useServerProvider
+                  ? ''
+                  : endpointController.text.trim(),
+              apiKey: !supportsDraftOpenAiConfig || useServerProvider
+                  ? ''
+                  : apiKeyController.text.trim(),
+              availableModels: supportsDraftOpenAiConfig
+                  ? uniqueStrings(availableModels)
+                  : <String>[],
+            );
+          }
+
           void setProviderStatus(String value, {bool isError = false}) {
             setModalState(() {
               providerStatus = value;
@@ -1019,10 +1043,12 @@ void showProviderSheet(BuildContext context, AppState state) {
               providerStatusError = false;
             });
             try {
-              final models = await OpenAiCompatibleApi.fetchModels(
-                baseUrl: endpointController.text,
-                apiKey: apiKeyController.text,
-              );
+              final models = useServerProvider
+                  ? await state.api.serverProviderModels(providerDraft())
+                  : await OpenAiCompatibleApi.fetchModels(
+                      baseUrl: endpointController.text,
+                      apiKey: apiKeyController.text,
+                    );
               if (!context.mounted) {
                 return;
               }
@@ -1054,10 +1080,13 @@ void showProviderSheet(BuildContext context, AppState state) {
               providerStatusError = false;
             });
             try {
-              final message = await OpenAiCompatibleApi.testConnection(
-                baseUrl: endpointController.text,
-                apiKey: apiKeyController.text,
-              );
+              final message = useServerProvider
+                  ? await state.api
+                      .serverProviderTestConnection(providerDraft())
+                  : await OpenAiCompatibleApi.testConnection(
+                      baseUrl: endpointController.text,
+                      apiKey: apiKeyController.text,
+                    );
               if (context.mounted) {
                 setProviderStatus(message);
               }
@@ -1079,11 +1108,13 @@ void showProviderSheet(BuildContext context, AppState state) {
               providerStatusError = false;
             });
             try {
-              final message = await OpenAiCompatibleApi.sendTestMessage(
-                baseUrl: endpointController.text,
-                apiKey: apiKeyController.text,
-                model: modelController.text,
-              );
+              final message = useServerProvider
+                  ? await state.api.serverProviderTestMessage(providerDraft())
+                  : await OpenAiCompatibleApi.sendTestMessage(
+                      baseUrl: endpointController.text,
+                      apiKey: apiKeyController.text,
+                      model: modelController.text,
+                    );
               if (context.mounted) {
                 setProviderStatus('测试消息返回：$message');
               }
@@ -1147,6 +1178,8 @@ void showProviderSheet(BuildContext context, AppState state) {
                     availableModels = <String>[];
                     providerStatus = '';
                     providerStatusError = false;
+                    useServerProvider =
+                        provider == 'openai' && apiKeyController.text.isEmpty;
                   }),
                 ),
                 const SizedBox(height: 12),
@@ -1181,36 +1214,57 @@ void showProviderSheet(BuildContext context, AppState state) {
                       style:
                           TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 10),
-                  TextField(
-                    controller: endpointController,
-                    keyboardType: TextInputType.url,
-                    decoration: const InputDecoration(
-                      labelText: '自定义端点（基础 URL）',
-                      hintText: '例如：http://localhost:1234/v1',
-                      border: OutlineInputBorder(),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('使用服务端模型提供商'),
+                    subtitle: Text(
+                      '模型列表和测试消息由 SillyTavern 服务端请求，API 密钥不下发到 App。',
+                      style: TextStyle(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
-                    onChanged: (_) => setModalState(() => providerStatus = ''),
+                    value: useServerProvider,
+                    onChanged: (value) => setModalState(() {
+                      useServerProvider = value;
+                      providerStatus = '';
+                      providerStatusError = false;
+                    }),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: apiKeyController,
-                    obscureText: obscureApiKey,
-                    keyboardType: TextInputType.visiblePassword,
-                    decoration: InputDecoration(
-                      labelText: '自定义 API 密钥（可选）',
-                      hintText: '缺少密钥',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        tooltip: obscureApiKey ? '显示密钥' : '隐藏密钥',
-                        onPressed: () =>
-                            setModalState(() => obscureApiKey = !obscureApiKey),
-                        icon: Icon(obscureApiKey
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined),
+                  if (!useServerProvider) ...[
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: endpointController,
+                      keyboardType: TextInputType.url,
+                      decoration: const InputDecoration(
+                        labelText: '自定义端点（基础 URL）',
+                        hintText: '例如：http://localhost:1234/v1',
+                        border: OutlineInputBorder(),
                       ),
+                      onChanged: (_) =>
+                          setModalState(() => providerStatus = ''),
                     ),
-                    onChanged: (_) => setModalState(() => providerStatus = ''),
-                  ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: apiKeyController,
+                      obscureText: obscureApiKey,
+                      keyboardType: TextInputType.visiblePassword,
+                      decoration: InputDecoration(
+                        labelText: '自定义 API 密钥（可选）',
+                        hintText: '缺少密钥',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          tooltip: obscureApiKey ? '显示密钥' : '隐藏密钥',
+                          onPressed: () => setModalState(
+                              () => obscureApiKey = !obscureApiKey),
+                          icon: Icon(obscureApiKey
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined),
+                        ),
+                      ),
+                      onChanged: (_) =>
+                          setModalState(() => providerStatus = ''),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   if (availableModelItems.isNotEmpty) ...[
                     DropdownButtonFormField<String>(
@@ -1325,24 +1379,7 @@ void showProviderSheet(BuildContext context, AppState state) {
                     Expanded(
                       child: FilledButton.icon(
                         onPressed: () async {
-                          await state.updateProvider(
-                            ProviderSelection(
-                              provider: provider,
-                              source: source,
-                              model: modelController.text.trim(),
-                              stream: stream,
-                              modelKey: current.modelKey,
-                              apiBaseUrl: supportsOpenAiConfig
-                                  ? endpointController.text.trim()
-                                  : '',
-                              apiKey: supportsOpenAiConfig
-                                  ? apiKeyController.text.trim()
-                                  : '',
-                              availableModels: supportsOpenAiConfig
-                                  ? uniqueStrings(availableModels)
-                                  : <String>[],
-                            ),
-                          );
+                          await state.updateProvider(providerDraft());
                           if (context.mounted) {
                             Navigator.pop(context);
                           }

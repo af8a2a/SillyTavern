@@ -185,6 +185,10 @@ their own local configuration instead of mutating SillyTavern's `settings.json`.
 For OpenAI-compatible custom frontends, this local override can include the
 base URL, API key, selected model, fetched model list, and connection-test
 state; the headless endpoint only advertises the catalog and server preset.
+Mobile clients can test the server preset provider by calling the existing
+authenticated Chat Completion backend endpoints with the returned
+`server_preset.source` and `server_preset.model`; the provider API key remains
+on the SillyTavern server.
 
 `current` is kept as a backwards-compatible alias of `server_preset`.
 `PATCH` remains available for legacy/admin clients that intentionally update the

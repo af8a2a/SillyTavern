@@ -197,6 +197,85 @@ class HeadlessApi {
     return ProviderCatalog.fromJson(json);
   }
 
+  Future<List<String>> serverProviderModels(ProviderSelection selection) async {
+    final json = await postJson(
+      '/api/backends/chat-completions/status',
+      _serverProviderBody(selection),
+    );
+    if (json['error'] == true) {
+      throw const HeadlessApiException('服务端模型连接失败');
+    }
+    final models = _modelIdsFromStatus(json);
+    if (models.isEmpty) {
+      throw const HeadlessApiException('服务端没有返回可用模型');
+    }
+    return models;
+  }
+
+  Future<String> serverProviderTestConnection(
+      ProviderSelection selection) async {
+    final models = await serverProviderModels(selection);
+    return '服务端连接成功，获取到 ${models.length} 个模型';
+  }
+
+  Future<String> serverProviderTestMessage(ProviderSelection selection) async {
+    final model = selection.model.trim();
+    if (model.isEmpty) {
+      throw const HeadlessApiException('请先选择或输入模型名');
+    }
+
+    final json = await postJson(
+      '/api/backends/chat-completions/generate',
+      {
+        ..._serverProviderBody(selection),
+        'model': model,
+        'messages': [
+          {'role': 'user', 'content': 'Reply with exactly OK.'},
+        ],
+        'temperature': 0,
+        'max_tokens': 8,
+        'stream': false,
+        'include_reasoning': false,
+      },
+    );
+    if (json['error'] == true) {
+      throw const HeadlessApiException('服务端测试消息发送失败');
+    }
+
+    final choices = listOfMaps(json['choices']);
+    final first = choices.isEmpty ? <String, dynamic>{} : choices.first;
+    final message = asMap(first['message']);
+    final content = stringOf(message['content'],
+        fallback: stringOf(first['text'], fallback: '测试消息发送成功'));
+    return content.trim().isEmpty ? '测试消息发送成功' : content.trim();
+  }
+
+  Map<String, dynamic> _serverProviderBody(ProviderSelection selection) {
+    if (selection.provider != 'openai') {
+      throw const HeadlessApiException('当前服务端测试仅支持 Chat Completion');
+    }
+    if (selection.source.trim().isEmpty) {
+      throw const HeadlessApiException('请先选择模型来源');
+    }
+    return {
+      'chat_completion_source': selection.source.trim(),
+      if (selection.model.trim().isNotEmpty) 'model': selection.model.trim(),
+    };
+  }
+
+  List<String> _modelIdsFromStatus(Map<String, dynamic> json) {
+    final data = json['data'];
+    final rows = data is Map ? data['data'] : data;
+    final models = rows is List
+        ? rows
+            .map((item) => item is Map ? stringOf(item['id']) : item.toString())
+            .where((id) => id.isNotEmpty)
+            .toList()
+        : <String>[];
+    models.sort();
+    return models;
+  }
+
   Future<Map<String, dynamic>> getJson(String path,
       [Map<String, String?> query = const <String, String?>{}]) async {
     final response = await http.get(uri(path, query), headers: _headers());

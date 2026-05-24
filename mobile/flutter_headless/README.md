@@ -11,6 +11,8 @@ This first pass focuses on data compatibility with the existing server:
   overrides locally on the device.
 - Configure OpenAI-compatible endpoints in the app, including base URL, API key,
   model fetch from `/models`, connection testing, and a small test message.
+- Test the server preset model provider from the app without sending saved
+  server API keys to the device.
 - Switch character cards and edit common TavernCard front-end fields.
 - Manage character chat files by date and size, delete old files, and create
   branches from any loaded message.
