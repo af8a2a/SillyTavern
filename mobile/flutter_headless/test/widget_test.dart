@@ -7,6 +7,44 @@ import 'package:sillytavern_headless/src/frontend_renderer.dart';
 import 'package:sillytavern_headless/src/models.dart';
 
 void main() {
+  test('parses alternate greetings from TavernCard data', () {
+    final character = CharacterCard.fromJson(const {
+      'name': 'Test',
+      'avatar': 'test.png',
+      'data': {
+        'first_mes': 'hello',
+        'alternate_greetings': ['alt one', 'alt two'],
+      },
+    });
+
+    expect(character.alternateGreetings, ['alt one', 'alt two']);
+  });
+
+  test('applies character display regex scripts before rendering', () {
+    final character = CharacterCard.fromJson(const {
+      'name': 'Test',
+      'avatar': 'test.png',
+      'data': {
+        'first_mes': 'hello',
+        'extensions': {
+          'regex_scripts': [
+            {
+              'findRegex': r'\[重塑仙缘\]',
+              'replaceString': '```html\n<html><body>第二开场</body></html>\n```',
+              'disabled': false,
+              'promptOnly': false,
+            },
+          ],
+        },
+      },
+    });
+
+    final display = applyCharacterDisplayRegexes('[重塑仙缘]', character);
+
+    expect(display, contains('第二开场'));
+    expect(extractFrontendHtmlBlock(display), isNotNull);
+  });
+
   test('extracts renderable fenced HTML frontend blocks', () {
     final block = extractFrontendHtmlBlock('intro\n```html\n'
         '<html><body><div class="char_avatar">{{charAvatarPath}}</div></body></html>'
@@ -41,6 +79,8 @@ void main() {
     expect(document, contains('http://127.0.0.1:8000/char.png'));
     expect(document, contains('http://127.0.0.1:8000/user.png'));
     expect(document, contains('TavernFrontendHeight.postMessage'));
+    expect(document, contains('window.setChatMessage'));
+    expect(document, contains('triggerSlashWithResult'));
     expect(document, contains('overflow-y: auto'));
     expect(document, contains('::-webkit-scrollbar'));
   });

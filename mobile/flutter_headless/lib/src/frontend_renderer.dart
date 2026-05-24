@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'models.dart';
+
 class FrontendHtmlBlock {
   const FrontendHtmlBlock({
     required this.html,
@@ -47,7 +49,6 @@ const String _hostStyle = '''
   html,
   body {
     max-width: 100%;
-    height: auto !important;
     min-height: 100%;
     overflow-x: hidden !important;
     overflow-y: auto !important;
@@ -74,6 +75,38 @@ const String _hostStyle = '''
     border-radius: 999px;
   }
 </style>''';
+
+String applyCharacterDisplayRegexes(String text, CharacterCard character) {
+  var result = text;
+  final data = asMap(character.raw['data']);
+  final rawScripts = [
+    ...listOfMaps(asMap(character.raw['extensions'])['regex_scripts']),
+    ...listOfMaps(asMap(data['extensions'])['regex_scripts']),
+  ];
+
+  for (final script in rawScripts) {
+    if (script['disabled'] == true || script['promptOnly'] == true) {
+      continue;
+    }
+
+    final findRegex = stringOf(script['findRegex']);
+    final replaceString = stringOf(script['replaceString']);
+    if (findRegex.isEmpty) {
+      continue;
+    }
+
+    try {
+      result = result.replaceAllMapped(
+        RegExp(findRegex, multiLine: true),
+        (_) => replaceString,
+      );
+    } catch (_) {
+      continue;
+    }
+  }
+
+  return result;
+}
 
 FrontendHtmlBlock? extractFrontendHtmlBlock(String text) {
   for (final match in _htmlFencePattern.allMatches(text)) {
@@ -198,10 +231,13 @@ String _buildHeadScript(String mobileContext) {
     return Promise.resolve(window.SillyTavernMobile);
   };
   window.getChatMessages = window.getChatMessages || function () {
-    return bridgeRequest('getChatMessages');
+    return bridgeRequest('getChatMessages', Array.prototype.slice.call(arguments));
   };
   window.getChatMessage = window.getChatMessage || function (messageId) {
     return bridgeRequest('getChatMessage', [messageId]);
+  };
+  window.setChatMessage = window.setChatMessage || function (message, messageId, options) {
+    return bridgeRequest('setChatMessage', [message, messageId, options || {}]);
   };
   window.getCurrentMessageId = window.getCurrentMessageId || function () {
     return bridgeRequest('getCurrentMessageId');
@@ -218,6 +254,15 @@ String _buildHeadScript(String mobileContext) {
   window.triggerSlashWithResult = window.triggerSlashWithResult || function (command) {
     return bridgeRequest('triggerSlashWithResult', [command]);
   };
+  window.SillyTavern = window.SillyTavern || {};
+  window.SillyTavern.getContext = window.SillyTavern.getContext || function () {
+    return window.SillyTavernMobile;
+  };
+  window.SillyTavern.executeSlashCommandsWithOptions =
+    window.SillyTavern.executeSlashCommandsWithOptions ||
+    function (command) {
+      return bridgeRequest('triggerSlashWithResult', [command]);
+    };
 })();
 </script>''';
 }

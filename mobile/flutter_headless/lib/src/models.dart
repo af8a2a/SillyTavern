@@ -32,6 +32,7 @@ class CharacterCard {
     required this.personality,
     required this.scenario,
     required this.firstMessage,
+    required this.alternateGreetings,
     required this.messageExample,
     required this.creatorNotes,
     required this.tags,
@@ -58,6 +59,9 @@ class CharacterCard {
         fallback: stringOf(json['first_message'],
             fallback: stringOf(data['first_mes'])),
       ),
+      alternateGreetings: listOfStrings(json['alternate_greetings']).isNotEmpty
+          ? listOfStrings(json['alternate_greetings'])
+          : listOfStrings(data['alternate_greetings']),
       messageExample: stringOf(json['mes_example'],
           fallback: stringOf(data['mes_example'])),
       creatorNotes: stringOf(
@@ -79,6 +83,7 @@ class CharacterCard {
   final String personality;
   final String scenario;
   final String firstMessage;
+  final List<String> alternateGreetings;
   final String messageExample;
   final String creatorNotes;
   final List<String> tags;
@@ -90,6 +95,7 @@ class CharacterCard {
     String? personality,
     String? scenario,
     String? firstMessage,
+    List<String>? alternateGreetings,
     String? messageExample,
     String? creatorNotes,
     List<String>? tags,
@@ -102,6 +108,7 @@ class CharacterCard {
       personality: personality ?? this.personality,
       scenario: scenario ?? this.scenario,
       firstMessage: firstMessage ?? this.firstMessage,
+      alternateGreetings: alternateGreetings ?? this.alternateGreetings,
       messageExample: messageExample ?? this.messageExample,
       creatorNotes: creatorNotes ?? this.creatorNotes,
       tags: tags ?? this.tags,
@@ -116,6 +123,7 @@ class CharacterCard {
       'personality': personality,
       'scenario': scenario,
       'first_mes': firstMessage,
+      'alternate_greetings': alternateGreetings,
       'mes_example': messageExample,
       'creator_notes': creatorNotes,
       'tags': tags,
@@ -126,6 +134,7 @@ class CharacterCard {
         'personality': personality,
         'scenario': scenario,
         'first_mes': firstMessage,
+        'alternate_greetings': alternateGreetings,
         'mes_example': messageExample,
         'tags': tags,
         'extensions': {

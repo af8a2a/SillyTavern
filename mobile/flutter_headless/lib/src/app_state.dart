@@ -235,6 +235,39 @@ class AppState extends ChangeNotifier {
     });
   }
 
+  Future<void> startChatWithAssistantMessage(String text,
+      {String? name}) async {
+    final character = selectedCharacter;
+    if (character == null || text.trim().isEmpty) {
+      return;
+    }
+
+    await _run(() async {
+      ChatSummary? chat = selectedChat;
+      if (chat == null) {
+        await createNewChat();
+        chat = selectedChat;
+      }
+      if (chat == null) {
+        return;
+      }
+
+      final page = await api.appendMessage(
+        character.avatar,
+        chat.fileId,
+        name: name?.trim().isNotEmpty == true ? name!.trim() : character.name,
+        isUser: false,
+        text: text.trim(),
+      );
+      messages = page.messages;
+      loadedOffset = page.offset;
+      loadedTotal = page.total;
+      await loadChats();
+      selectedChat = chats.firstWhere((item) => item.fileName == page.fileName,
+          orElse: () => chat!);
+    });
+  }
+
   Future<void> deleteChat(ChatSummary chat) async {
     final character = selectedCharacter;
     if (character == null) {

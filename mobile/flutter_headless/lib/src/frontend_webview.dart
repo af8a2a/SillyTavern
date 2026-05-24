@@ -91,7 +91,7 @@ class _FrontendHtmlViewState extends State<FrontendHtmlView> {
     );
   }
 
-  void _handleBridgeMessage(String rawMessage) {
+  Future<void> _handleBridgeMessage(String rawMessage) async {
     String id = '';
     Object? result;
     var ok = true;
@@ -106,7 +106,7 @@ class _FrontendHtmlViewState extends State<FrontendHtmlView> {
       final args = payload['args'] is List
           ? List<Object?>.from(payload['args'])
           : <Object?>[];
-      result = _bridgeResult(method, args);
+      result = await _bridgeResult(method, args);
     } catch (exception) {
       ok = false;
       result = exception.toString();
@@ -116,20 +116,30 @@ class _FrontendHtmlViewState extends State<FrontendHtmlView> {
       return;
     }
 
-    controller.runJavaScript(
-      'window.__SillyTavernMobileBridge&&'
-      'window.__SillyTavernMobileBridge.resolve('
-      '${jsonEncode(id)},$ok,${jsonEncode(result)});',
-    );
+    try {
+      await controller.runJavaScript(
+        'window.__SillyTavernMobileBridge&&'
+        'window.__SillyTavernMobileBridge.resolve('
+        '${jsonEncode(id)},$ok,${jsonEncode(result)});',
+      );
+    } catch (_) {
+      // The source WebView may have been rebuilt by a bridge-triggered state update.
+    }
   }
 
-  Object? _bridgeResult(String method, List<Object?> args) {
+  Future<Object?> _bridgeResult(String method, List<Object?> args) async {
     switch (method) {
       case 'getChatMessages':
-        return _bridgeMessages(widget.state);
+        return _bridgeMessages(
+          widget.state,
+          character: widget.character,
+          isStarter: widget.isStarter,
+        );
       case 'getChatMessage':
         final messageIndex = _intFromObject(args.isEmpty ? null : args.first);
         return _bridgeMessage(widget.state, messageIndex);
+      case 'setChatMessage':
+        return _setChatMessage(args);
       case 'getCurrentMessageId':
         return widget.messageIndex;
       case 'getLastMessageId':
@@ -141,12 +151,71 @@ class _FrontendHtmlViewState extends State<FrontendHtmlView> {
           character: widget.character,
         );
       case 'triggerSlash':
-        return null;
+        return _triggerSlash(args, expectResult: false);
       case 'triggerSlashWithResult':
-        return null;
+        return _triggerSlash(args, expectResult: true);
       default:
         throw UnsupportedError('Unsupported mobile bridge method: $method');
     }
+  }
+
+  Future<bool> _setChatMessage(List<Object?> args) async {
+    final messageIndex =
+        _intFromObject(args.length > 1 ? args[1] : null) ?? widget.messageIndex;
+    if (messageIndex == null) {
+      return false;
+    }
+
+    final options = args.length > 2 && args[2] is Map
+        ? Map<Object?, Object?>.from(args[2] as Map)
+        : <Object?, Object?>{};
+    final swipeId = _intFromObject(
+      options['swipe_id'] ?? options['swipeId'] ?? options['swipe'],
+    );
+    if (swipeId == null) {
+      return false;
+    }
+
+    final visibleIndex = _visibleMessageIndex(widget.state, messageIndex);
+    if (visibleIndex == null) {
+      if (!widget.isStarter) {
+        return false;
+      }
+
+      final text = _starterSwipeText(
+        widget.character,
+        swipeId,
+        args.isEmpty ? null : args.first,
+      );
+      if (text.trim().isEmpty) {
+        return false;
+      }
+
+      await widget.state.startChatWithAssistantMessage(
+        text,
+        name: widget.character.name,
+      );
+      return true;
+    }
+
+    await widget.state.selectSwipeAt(visibleIndex, swipeId);
+    return true;
+  }
+
+  Future<Object?> _triggerSlash(List<Object?> args,
+      {required bool expectResult}) async {
+    final command = args.isEmpty ? '' : args.first?.toString().trim() ?? '';
+    final sendMatch = RegExp(r'^/send\s+([\s\S]+)$', caseSensitive: false)
+        .firstMatch(command);
+    if (sendMatch != null) {
+      final text = sendMatch.group(1)?.trim() ?? '';
+      if (text.isNotEmpty) {
+        await widget.state.sendUserMessage(text);
+      }
+      return expectResult ? text : null;
+    }
+
+    return expectResult ? '' : null;
   }
 
   @override
@@ -166,6 +235,10 @@ class _FrontendHtmlViewState extends State<FrontendHtmlView> {
           child: WebViewWidget(
             controller: controller,
             gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+              Factory<TapGestureRecognizer>(TapGestureRecognizer.new),
+              Factory<LongPressGestureRecognizer>(
+                LongPressGestureRecognizer.new,
+              ),
               Factory<VerticalDragGestureRecognizer>(
                 VerticalDragGestureRecognizer.new,
               ),
@@ -213,7 +286,28 @@ Map<String, dynamic> _frontendContext({
   };
 }
 
-List<Map<String, dynamic>> _bridgeMessages(AppState state) {
+List<Map<String, dynamic>> _bridgeMessages(
+  AppState state, {
+  required CharacterCard character,
+  required bool isStarter,
+}) {
+  if (state.messages.isEmpty && isStarter) {
+    return [
+      {
+        'id': 0,
+        'name': character.name,
+        'is_user': false,
+        'mes': character.firstMessage,
+        'send_date': null,
+        'swipes': [
+          character.firstMessage,
+          ...character.alternateGreetings,
+        ],
+        'swipe_id': 0,
+      },
+    ];
+  }
+
   return [
     for (var i = 0; i < state.messages.length; i++)
       _bridgeMessageJson(state.messages[i], state.loadedOffset + i),
@@ -235,6 +329,33 @@ Map<String, dynamic>? _bridgeMessage(AppState state, int? messageIndex) {
     );
   }
   return null;
+}
+
+int? _visibleMessageIndex(AppState state, int messageIndex) {
+  final localIndex = messageIndex - state.loadedOffset;
+  if (localIndex >= 0 && localIndex < state.messages.length) {
+    return localIndex;
+  }
+  if (messageIndex >= 0 && messageIndex < state.messages.length) {
+    return messageIndex;
+  }
+  return null;
+}
+
+String _starterSwipeText(
+  CharacterCard character,
+  int swipeId,
+  Object? requestedText,
+) {
+  if (swipeId == 0) {
+    return character.firstMessage;
+  }
+  final alternateIndex = swipeId - 1;
+  if (alternateIndex >= 0 &&
+      alternateIndex < character.alternateGreetings.length) {
+    return character.alternateGreetings[alternateIndex];
+  }
+  return requestedText?.toString() ?? '';
 }
 
 Map<String, dynamic> _bridgeMessageJson(ChatMessage message, int messageIndex) {

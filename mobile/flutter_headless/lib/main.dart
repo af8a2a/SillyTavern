@@ -300,12 +300,14 @@ class StarterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final frontend = extractFrontendHtmlBlock(character.firstMessage);
+    final firstMessage =
+        applyCharacterDisplayRegexes(character.firstMessage, character);
+    final frontend = extractFrontendHtmlBlock(firstMessage);
     final content = [
       if (frontend?.remainingText.trim().isNotEmpty == true)
         frontend!.remainingText.trim()
-      else if (frontend == null && character.firstMessage.trim().isNotEmpty)
-        character.firstMessage.trim(),
+      else if (frontend == null && firstMessage.trim().isNotEmpty)
+        firstMessage.trim(),
       if (character.description.trim().isNotEmpty) character.description.trim(),
     ].join('\n\n');
 
@@ -327,6 +329,7 @@ class StarterCard extends StatelessWidget {
               state: state,
               character: character,
               html: frontend.html,
+              messageIndex: 0,
               isStarter: true,
             ),
             const SizedBox(height: 18),
@@ -401,10 +404,13 @@ class MessageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isUser = message.isUser;
     final character = state.selectedCharacter;
+    final displayText = !isUser && character != null
+        ? applyCharacterDisplayRegexes(message.text, character)
+        : message.text;
     final frontend = !isUser && character != null
-        ? extractFrontendHtmlBlock(message.text)
+        ? extractFrontendHtmlBlock(displayText)
         : null;
-    final markdownText = frontend?.remainingText ?? message.text;
+    final markdownText = frontend?.remainingText ?? displayText;
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
