@@ -9,16 +9,14 @@ void main() {
       MaterialApp(
         home: Scaffold(
           bottomNavigationBar: AppNavigationBar(
-            selectedIndex: 1,
+            selectedIndex: 0,
             onDestinationSelected: (_) {},
           ),
         ),
       ),
     );
 
-    expect(find.text('探索'), findsOneWidget);
     expect(find.text('聊天'), findsOneWidget);
-    expect(find.text('随机推荐'), findsOneWidget);
     expect(find.text('记录'), findsOneWidget);
     expect(find.text('我的'), findsOneWidget);
   });

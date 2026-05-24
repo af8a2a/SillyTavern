@@ -36,7 +36,7 @@ class HeadlessHomePage extends StatefulWidget {
 
 class _HeadlessHomePageState extends State<HeadlessHomePage> {
   final AppState state = AppState();
-  int tabIndex = 1;
+  int tabIndex = 0;
 
   @override
   void initState() {
@@ -56,12 +56,9 @@ class _HeadlessHomePageState extends State<HeadlessHomePage> {
       animation: state,
       builder: (context, _) {
         final pages = <Widget>[
-          ExploreTab(
-              state: state, onOpenChat: () => setState(() => tabIndex = 1)),
           ChatTab(state: state),
-          RecommendationsTab(state: state),
           HistoryTab(
-              state: state, onOpenChat: () => setState(() => tabIndex = 1)),
+              state: state, onOpenChat: () => setState(() => tabIndex = 0)),
           SettingsTab(state: state),
         ];
 
@@ -495,10 +492,6 @@ class Composer extends StatelessWidget {
                       color: Color(0xff2f7f98),
                       fontWeight: FontWeight.w500),
                 ),
-                const Text('输入消耗384积分',
-                    style: TextStyle(fontSize: 15, color: Color(0xff8d8d95))),
-                const Text('输出消耗224积分',
-                    style: TextStyle(fontSize: 15, color: Color(0xff8d8d95))),
               ],
             ),
           ),
@@ -562,11 +555,6 @@ class Composer extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               ActionChip(
-                label: const Text('MOD广场'),
-                onPressed: () {},
-              ),
-              const SizedBox(width: 8),
-              ActionChip(
                 avatar: Icon(
                     provider?.stream == true ? Icons.bolt : Icons.info_outline,
                     size: 18),
@@ -616,80 +604,6 @@ class Composer extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class ExploreTab extends StatelessWidget {
-  const ExploreTab({required this.state, required this.onOpenChat, super.key});
-
-  final AppState state;
-  final VoidCallback onOpenChat;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
-      children: [
-        const Text('探索',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 12),
-        for (final character in state.characters)
-          CharacterTile(
-            state: state,
-            character: character,
-            onTap: () async {
-              await state.selectCharacter(character);
-              onOpenChat();
-            },
-          ),
-      ],
-    );
-  }
-}
-
-class RecommendationsTab extends StatelessWidget {
-  const RecommendationsTab({required this.state, super.key});
-
-  final AppState state;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const Text('随机推荐',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 12),
-        for (final character in state.characters.take(6))
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: panelDecoration(),
-            child: Row(
-              children: [
-                CharacterAvatar(state: state, character: character, radius: 24),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(character.name,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 17)),
-                      Text(
-                        character.description,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Color(0xff74747b)),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
     );
   }
 }
@@ -939,17 +853,9 @@ class AppNavigationBar extends StatelessWidget {
       onDestinationSelected: onDestinationSelected,
       destinations: const [
         NavigationDestination(
-            icon: Icon(Icons.travel_explore_outlined),
-            selectedIcon: Icon(Icons.travel_explore),
-            label: '探索'),
-        NavigationDestination(
             icon: Icon(Icons.chat_bubble_outline),
             selectedIcon: Icon(Icons.chat_bubble),
             label: '聊天'),
-        NavigationDestination(
-            icon: Icon(Icons.style_outlined),
-            selectedIcon: Icon(Icons.style),
-            label: '随机推荐'),
         NavigationDestination(
             icon: Icon(Icons.history_outlined),
             selectedIcon: Icon(Icons.history),
