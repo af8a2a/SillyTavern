@@ -171,6 +171,26 @@ GET /api/headless/v1/bootstrap
 Returns the current user, route roots, media URL templates, and advertised
 capabilities.
 
+### Model Providers
+
+```http
+GET /api/headless/v1/providers
+PATCH /api/headless/v1/providers/current
+```
+
+The providers endpoint exposes the current SillyTavern model selection and a
+mobile-friendly provider/source catalog. `PATCH` updates the existing
+`settings.json` fields used by the web UI, for example:
+
+```json
+{
+  "provider": "openai",
+  "source": "makersuite",
+  "model": "gemini-2.5-pro",
+  "stream": true
+}
+```
+
 ### Library
 
 ```http
@@ -200,11 +220,18 @@ POST /api/headless/v1/characters/:avatar/chats
 GET /api/headless/v1/characters/:avatar/chats/:chatId
 PUT /api/headless/v1/characters/:avatar/chats/:chatId
 POST /api/headless/v1/characters/:avatar/chats/:chatId/messages
+PATCH /api/headless/v1/characters/:avatar/chats/:chatId/messages/:messageIndex/swipe
+POST /api/headless/v1/characters/:avatar/chats/:chatId/branches
 DELETE /api/headless/v1/characters/:avatar/chats/:chatId
 ```
 
 Chat payloads can be an array, `{ "messages": [...] }`, or `{ "chat": [...] }`.
 If a chat metadata header is missing, the server creates one.
+
+Chat lists support `sort=date|size` and `direction=asc|desc`. Chat reads support
+mobile pagination with `offset` and `limit`; the response includes a
+`pagination` object. Message indexes for swipe and branch endpoints are visible
+message indexes, excluding the JSONL metadata row.
 
 ### Groups
 

@@ -16,6 +16,62 @@ export const router = express.Router();
 const HEADLESS_API_VERSION = 'v1';
 const CHAT_EXTENSION = '.jsonl';
 const WORLD_EXTENSION = '.json';
+const SETTINGS_FILE = 'settings.json';
+
+const PROVIDERS = [
+    { id: 'openai', label: 'Chat Completion', sources: ['openai', 'claude', 'openrouter', 'ai21', 'makersuite', 'vertexai', 'mistralai', 'custom', 'cohere', 'perplexity', 'groq', 'electronhub', 'chutes', 'nanogpt', 'deepseek', 'aimlapi', 'xai', 'pollinations', 'moonshot', 'fireworks', 'cometapi', 'azure_openai', 'zai', 'siliconflow', 'workers_ai', 'minimax'] },
+    { id: 'textgenerationwebui', label: 'Text Completion', sources: ['ooba', 'mancer', 'vllm', 'aphrodite', 'tabby', 'koboldcpp', 'togetherai', 'llamacpp', 'ollama', 'infermaticai', 'dreamgen', 'openrouter', 'featherless', 'huggingface', 'generic'] },
+    { id: 'kobold', label: 'KoboldAI Classic', sources: [] },
+    { id: 'koboldhorde', label: 'AI Horde', sources: [] },
+    { id: 'novel', label: 'NovelAI', sources: [] },
+];
+
+const OPENAI_MODEL_SETTING_BY_SOURCE = {
+    openai: 'openai_model',
+    claude: 'claude_model',
+    openrouter: 'openrouter_model',
+    ai21: 'ai21_model',
+    makersuite: 'google_model',
+    vertexai: 'vertexai_model',
+    mistralai: 'mistralai_model',
+    custom: 'custom_model',
+    cohere: 'cohere_model',
+    perplexity: 'perplexity_model',
+    groq: 'groq_model',
+    electronhub: 'electronhub_model',
+    chutes: 'chutes_model',
+    nanogpt: 'nanogpt_model',
+    deepseek: 'deepseek_model',
+    aimlapi: 'aimlapi_model',
+    xai: 'xai_model',
+    pollinations: 'pollinations_model',
+    moonshot: 'moonshot_model',
+    fireworks: 'fireworks_model',
+    cometapi: 'cometapi_model',
+    azure_openai: 'azure_deployment_name',
+    zai: 'zai_model',
+    siliconflow: 'siliconflow_model',
+    workers_ai: 'workers_ai_model',
+    minimax: 'minimax_model',
+};
+
+const TEXTGEN_MODEL_SETTING_BY_SOURCE = {
+    ooba: 'custom_model',
+    mancer: 'mancer_model',
+    vllm: 'vllm_model',
+    aphrodite: 'aphrodite_model',
+    tabby: 'tabby_model',
+    koboldcpp: 'custom_model',
+    togetherai: 'togetherai_model',
+    llamacpp: 'llamacpp_model',
+    ollama: 'ollama_model',
+    infermaticai: 'infermaticai_model',
+    dreamgen: 'dreamgen_model',
+    openrouter: 'openrouter_model',
+    featherless: 'featherless_model',
+    huggingface: 'custom_model',
+    generic: 'generic_model',
+};
 
 /**
  * Wraps an async Express route and forwards failures to the router error handler.
@@ -56,6 +112,169 @@ function getSafeFileName(value, extension) {
 }
 
 /**
+ * Reads a user's settings file.
+ * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @returns {object} Settings object
+ */
+function readUserSettings(directories) {
+    const settingsPath = path.join(directories.root, SETTINGS_FILE);
+    const settings = tryParse(fs.readFileSync(settingsPath, 'utf8'));
+
+    if (!settings || typeof settings !== 'object') {
+        throw Object.assign(new Error('Invalid settings file'), { status: 500 });
+    }
+
+    return settings;
+}
+
+/**
+ * Writes a user's settings file.
+ * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @param {object} settings Settings object
+ */
+function writeUserSettings(directories, settings) {
+    writeFileAtomicSync(path.join(directories.root, SETTINGS_FILE), JSON.stringify(settings, null, 4), 'utf8');
+}
+
+/**
+ * Gets the current model/provider selection from SillyTavern settings.
+ * @param {object} settings Settings object
+ * @returns {{provider: string, source: string, model: string, stream: boolean, modelKey: string}}
+ */
+function getCurrentProviderSelection(settings) {
+    const provider = String(settings.main_api ?? 'koboldhorde');
+
+    if (provider === 'openai') {
+        const source = String(settings.oai_settings?.chat_completion_source ?? 'openai');
+        const modelKey = OPENAI_MODEL_SETTING_BY_SOURCE[source] ?? 'custom_model';
+        return {
+            provider,
+            source,
+            model: String(settings.oai_settings?.[modelKey] ?? ''),
+            stream: !!settings.oai_settings?.stream_openai,
+            modelKey,
+        };
+    }
+
+    if (provider === 'textgenerationwebui') {
+        const source = String(settings.textgenerationwebui_settings?.type ?? 'ooba');
+        const modelKey = TEXTGEN_MODEL_SETTING_BY_SOURCE[source] ?? 'custom_model';
+        return {
+            provider,
+            source,
+            model: String(settings.textgenerationwebui_settings?.[modelKey] ?? ''),
+            stream: !!settings.textgenerationwebui_settings?.streaming,
+            modelKey,
+        };
+    }
+
+    if (provider === 'novel') {
+        return {
+            provider,
+            source: '',
+            model: String(settings.nai_settings?.model_novel ?? ''),
+            stream: !!settings.nai_settings?.streaming_novel,
+            modelKey: 'model_novel',
+        };
+    }
+
+    if (provider === 'kobold') {
+        return {
+            provider,
+            source: '',
+            model: String(settings.kai_settings?.preset_settings ?? ''),
+            stream: !!settings.kai_settings?.streaming_kobold,
+            modelKey: 'preset_settings',
+        };
+    }
+
+    return {
+        provider,
+        source: '',
+        model: '',
+        stream: false,
+        modelKey: '',
+    };
+}
+
+/**
+ * Applies a provider/model selection to SillyTavern settings.
+ * @param {object} settings Settings object
+ * @param {unknown} body Request body
+ * @returns {{provider: string, source: string, model: string, stream: boolean, modelKey: string}}
+ */
+function applyProviderSelection(settings, body) {
+    const provider = String(body?.provider ?? settings.main_api ?? 'koboldhorde');
+    const source = String(body?.source ?? '');
+    const model = typeof body?.model === 'string' ? body.model : undefined;
+    const stream = typeof body?.stream === 'boolean' ? body.stream : undefined;
+
+    if (!PROVIDERS.some(item => item.id === provider)) {
+        throw Object.assign(new Error('Unsupported provider'), { status: 400 });
+    }
+
+    settings.main_api = provider;
+
+    if (provider === 'openai') {
+        settings.oai_settings ??= {};
+        const nextSource = source || settings.oai_settings.chat_completion_source || 'openai';
+        if (!OPENAI_MODEL_SETTING_BY_SOURCE[nextSource]) {
+            throw Object.assign(new Error('Unsupported chat completion source'), { status: 400 });
+        }
+        const modelKey = OPENAI_MODEL_SETTING_BY_SOURCE[nextSource];
+        settings.oai_settings.chat_completion_source = nextSource;
+        if (model !== undefined) {
+            settings.oai_settings[modelKey] = model;
+        }
+        if (stream !== undefined) {
+            settings.oai_settings.stream_openai = stream;
+        }
+        return getCurrentProviderSelection(settings);
+    }
+
+    if (provider === 'textgenerationwebui') {
+        settings.textgenerationwebui_settings ??= {};
+        const nextSource = source || settings.textgenerationwebui_settings.type || 'ooba';
+        if (!TEXTGEN_MODEL_SETTING_BY_SOURCE[nextSource]) {
+            throw Object.assign(new Error('Unsupported text completion source'), { status: 400 });
+        }
+        const modelKey = TEXTGEN_MODEL_SETTING_BY_SOURCE[nextSource];
+        settings.textgenerationwebui_settings.type = nextSource;
+        if (model !== undefined) {
+            settings.textgenerationwebui_settings[modelKey] = model;
+        }
+        if (stream !== undefined) {
+            settings.textgenerationwebui_settings.streaming = stream;
+        }
+        return getCurrentProviderSelection(settings);
+    }
+
+    if (provider === 'novel') {
+        settings.nai_settings ??= {};
+        if (model !== undefined) {
+            settings.nai_settings.model_novel = model;
+        }
+        if (stream !== undefined) {
+            settings.nai_settings.streaming_novel = stream;
+        }
+        return getCurrentProviderSelection(settings);
+    }
+
+    if (provider === 'kobold') {
+        settings.kai_settings ??= {};
+        if (model !== undefined) {
+            settings.kai_settings.preset_settings = model;
+        }
+        if (stream !== undefined) {
+            settings.kai_settings.streaming_kobold = stream;
+        }
+        return getCurrentProviderSelection(settings);
+    }
+
+    return getCurrentProviderSelection(settings);
+}
+
+/**
  * Gets a safe character avatar file name.
  * @param {import('express').Request} request Express request
  * @returns {string} Avatar file name
@@ -80,6 +299,46 @@ function getChatFileName(chatId) {
  */
 function getWorldFileName(worldName) {
     return getSafeFileName(worldName, WORLD_EXTENSION);
+}
+
+/**
+ * Coerces a non-negative integer query/body value.
+ * @param {unknown} value Candidate value
+ * @param {number} fallback Fallback value
+ * @returns {number}
+ */
+function toNonNegativeInteger(value, fallback = 0) {
+    const number = Number(value);
+    return Number.isInteger(number) && number >= 0 ? number : fallback;
+}
+
+/**
+ * Gets the absolute JSONL index for a visible message index.
+ * @param {object[]} chat Chat array
+ * @param {unknown} visibleIndex Message index excluding metadata row
+ * @returns {number}
+ */
+function getAbsoluteMessageIndex(chat, visibleIndex) {
+    const index = toNonNegativeInteger(visibleIndex, chat.length - 1);
+    return chat[0]?.chat_metadata ? index + 1 : index;
+}
+
+/**
+ * Gets a unique chat file name for a directory.
+ * @param {string} chatDirectory Chat directory
+ * @param {string} baseName Base file name without extension
+ * @returns {string} Unique chat file name
+ */
+function getUniqueChatFileName(chatDirectory, baseName) {
+    let index = 0;
+    let candidate = `${sanitize(baseName) || humanizedDateTime()}${CHAT_EXTENSION}`;
+
+    while (fs.existsSync(path.join(chatDirectory, candidate))) {
+        index += 1;
+        candidate = `${sanitize(baseName) || humanizedDateTime()} (${index})${CHAT_EXTENSION}`;
+    }
+
+    return candidate;
 }
 
 /**
@@ -325,11 +584,31 @@ router.get('/bootstrap', asyncRoute(async (request, response) => {
         },
         features: {
             characters: ['list', 'get', 'patch'],
-            chats: ['list', 'get', 'create', 'replace', 'append-message', 'delete'],
+            chats: ['list', 'get', 'create', 'replace', 'append-message', 'delete', 'paginate', 'branch', 'select-swipe'],
             groups: ['list', 'get', 'get-chat', 'replace-chat'],
             worlds: ['list', 'get', 'replace', 'delete'],
             backgrounds: ['list'],
+            providers: ['list', 'current', 'switch'],
         },
+    });
+}));
+
+router.get('/providers', asyncRoute(async (request, response) => {
+    const settings = readUserSettings(request.user.directories);
+    response.json({
+        current: getCurrentProviderSelection(settings),
+        providers: PROVIDERS,
+    });
+}));
+
+router.patch('/providers/current', asyncRoute(async (request, response) => {
+    const settings = readUserSettings(request.user.directories);
+    const current = applyProviderSelection(settings, request.body);
+    writeUserSettings(request.user.directories, settings);
+    response.json({
+        ok: true,
+        current,
+        providers: PROVIDERS,
     });
 }));
 
@@ -401,8 +680,35 @@ router.get('/characters/:avatar/chats', asyncRoute(async (request, response) => 
     const files = (await fs.promises.readdir(chatDirectory, { withFileTypes: true }))
         .filter(file => file.isFile() && path.extname(file.name).toLowerCase() === CHAT_EXTENSION)
         .map(file => file.name);
-    const items = await Promise.all(files.map(file => getChatInfo(path.join(chatDirectory, file), {}, true)));
-    response.json({ items: items.filter(item => item.file_name) });
+    const items = await Promise.all(files.map(async file => {
+        const filePath = path.join(chatDirectory, file);
+        const [chatInfo, stat] = await Promise.all([
+            getChatInfo(filePath, {}, true),
+            fs.promises.stat(filePath),
+        ]);
+
+        return {
+            ...chatInfo,
+            file_size_bytes: stat.size,
+            created_at: stat.birthtimeMs,
+            updated_at: stat.mtimeMs,
+        };
+    }));
+    const sort = String(request.query.sort ?? 'date');
+    const direction = String(request.query.direction ?? 'desc') === 'asc' ? 1 : -1;
+    const filteredItems = items.filter(item => item.file_name);
+
+    filteredItems.sort((a, b) => {
+        if (sort === 'size') {
+            return direction * ((a.file_size_bytes ?? 0) - (b.file_size_bytes ?? 0));
+        }
+
+        const aDate = Date.parse(a.last_mes) || a.updated_at || 0;
+        const bDate = Date.parse(b.last_mes) || b.updated_at || 0;
+        return direction * (aDate - bDate);
+    });
+
+    response.json({ items: filteredItems });
 }));
 
 router.post('/characters/:avatar/chats', asyncRoute(async (request, response) => {
@@ -429,10 +735,34 @@ router.get('/characters/:avatar/chats/:chatId', asyncRoute(async (request, respo
         return response.sendStatus(404);
     }
 
+    const messages = getChatData(chatFilePath);
+    const usePagination = request.query.offset !== undefined || request.query.limit !== undefined;
+
+    if (!usePagination) {
+        return response.json({
+            file_name: chatFileName,
+            file_id: path.parse(chatFileName).name,
+            messages,
+        });
+    }
+
+    const metadata = messages[0]?.chat_metadata ? messages[0] : null;
+    const visibleMessages = metadata ? messages.slice(1) : messages;
+    const offset = toNonNegativeInteger(request.query.offset, 0);
+    const limit = Math.min(toNonNegativeInteger(request.query.limit, visibleMessages.length || 1), 500);
+    const page = visibleMessages.slice(offset, offset + limit);
+
     response.json({
         file_name: chatFileName,
         file_id: path.parse(chatFileName).name,
-        messages: getChatData(chatFilePath),
+        messages: metadata ? [metadata, ...page] : page,
+        pagination: {
+            offset,
+            limit,
+            total: visibleMessages.length,
+            has_more_before: offset > 0,
+            has_more_after: offset + page.length < visibleMessages.length,
+        },
     });
 }));
 
@@ -460,6 +790,84 @@ router.post('/characters/:avatar/chats/:chatId/messages', asyncRoute(async (requ
     const cardName = path.parse(avatar).name;
     await trySaveChat(nextChat, chatFilePath, request.body?.force, request.user.profile.handle, cardName, request.user.directories.backups);
     response.status(201).json({ ok: true, file_name: chatFileName, file_id: path.parse(chatFileName).name, message, messages: nextChat });
+}));
+
+router.patch('/characters/:avatar/chats/:chatId/messages/:messageIndex/swipe', asyncRoute(async (request, response) => {
+    const avatar = getAvatarFileName(request);
+    const { chatFileName, chatFilePath } = getCharacterChatPath(request.user.directories, avatar, request.params.chatId);
+
+    if (!fs.existsSync(chatFilePath)) {
+        return response.sendStatus(404);
+    }
+
+    const chat = getChatData(chatFilePath);
+    const absoluteIndex = getAbsoluteMessageIndex(chat, request.params.messageIndex);
+    const message = chat[absoluteIndex];
+    const swipeId = toNonNegativeInteger(request.body?.swipe_id ?? request.body?.swipeId, 0);
+
+    if (!message || !Array.isArray(message.swipes) || swipeId >= message.swipes.length) {
+        return response.status(400).json({ error: 'Message has no swipe at the requested index' });
+    }
+
+    message.swipe_id = swipeId;
+    message.mes = String(message.swipes[swipeId] ?? message.mes ?? '');
+
+    const cardName = path.parse(avatar).name;
+    await trySaveChat(chat, chatFilePath, request.body?.force, request.user.profile.handle, cardName, request.user.directories.backups);
+    response.json({ ok: true, file_name: chatFileName, file_id: path.parse(chatFileName).name, message, messages: chat });
+}));
+
+router.post('/characters/:avatar/chats/:chatId/branches', asyncRoute(async (request, response) => {
+    const avatar = getAvatarFileName(request);
+    const { chatDirectory, chatFileName, chatFilePath } = getCharacterChatPath(request.user.directories, avatar, request.params.chatId);
+
+    if (!fs.existsSync(chatFilePath)) {
+        return response.sendStatus(404);
+    }
+
+    const chat = getChatData(chatFilePath);
+    const absoluteIndex = getAbsoluteMessageIndex(chat, request.body?.message_index ?? request.body?.messageIndex);
+    const selectedMessage = chat[absoluteIndex];
+
+    if (!selectedMessage) {
+        return response.status(400).json({ error: 'Message index is out of range' });
+    }
+
+    const branchChat = chat.slice(0, absoluteIndex + 1).map(entry => ({ ...entry }));
+    const swipeId = request.body?.swipe_id ?? request.body?.swipeId;
+    const branchLastMessage = branchChat[branchChat.length - 1];
+
+    if (swipeId !== undefined && Array.isArray(branchLastMessage.swipes)) {
+        const selectedSwipeId = toNonNegativeInteger(swipeId, 0);
+        if (selectedSwipeId >= branchLastMessage.swipes.length) {
+            return response.status(400).json({ error: 'Message has no swipe at the requested index' });
+        }
+
+        branchLastMessage.swipe_id = selectedSwipeId;
+        branchLastMessage.mes = String(branchLastMessage.swipes[selectedSwipeId] ?? branchLastMessage.mes ?? '');
+    }
+
+    const baseName = String(request.body?.name || `${path.parse(chatFileName).name} branch ${humanizedDateTime()}`);
+    const branchFileName = getUniqueChatFileName(chatDirectory, baseName);
+    const branchFilePath = path.join(chatDirectory, branchFileName);
+    const cardName = path.parse(avatar).name;
+
+    await trySaveChat(branchChat, branchFilePath, request.body?.force, request.user.profile.handle, cardName, request.user.directories.backups);
+
+    selectedMessage.extra = selectedMessage.extra && typeof selectedMessage.extra === 'object' ? selectedMessage.extra : {};
+    if (!Array.isArray(selectedMessage.extra.branches)) {
+        selectedMessage.extra.branches = [];
+    }
+    selectedMessage.extra.branches.push(path.parse(branchFileName).name);
+    await trySaveChat(chat, chatFilePath, request.body?.force, request.user.profile.handle, cardName, request.user.directories.backups);
+
+    response.status(201).json({
+        ok: true,
+        source_file_name: chatFileName,
+        file_name: branchFileName,
+        file_id: path.parse(branchFileName).name,
+        messages: branchChat,
+    });
 }));
 
 router.delete('/characters/:avatar/chats/:chatId', asyncRoute(async (request, response) => {
