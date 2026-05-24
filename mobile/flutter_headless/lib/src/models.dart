@@ -2,6 +2,7 @@ class HeadlessBootstrap {
   const HeadlessBootstrap({
     required this.version,
     required this.userName,
+    required this.userAvatar,
     required this.remotePublicUrl,
   });
 
@@ -11,12 +12,14 @@ class HeadlessBootstrap {
     return HeadlessBootstrap(
       version: stringOf(json['version'], fallback: 'v1'),
       userName: stringOf(user['name'], fallback: stringOf(user['handle'])),
+      userAvatar: stringOf(user['avatar']),
       remotePublicUrl: stringOf(remote['publicUrl']),
     );
   }
 
   final String version;
   final String userName;
+  final String userAvatar;
   final String remotePublicUrl;
 }
 

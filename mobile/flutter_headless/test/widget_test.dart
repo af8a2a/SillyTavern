@@ -3,9 +3,48 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:sillytavern_headless/main.dart';
 import 'package:sillytavern_headless/src/app_state.dart';
+import 'package:sillytavern_headless/src/frontend_renderer.dart';
 import 'package:sillytavern_headless/src/models.dart';
 
 void main() {
+  test('extracts renderable fenced HTML frontend blocks', () {
+    final block = extractFrontendHtmlBlock('intro\n```html\n'
+        '<html><body><div class="char_avatar">{{charAvatarPath}}</div></body></html>'
+        '\n```\noutro');
+
+    expect(block, isNotNull);
+    expect(block!.html, contains('<body>'));
+    expect(block.remainingText, 'intro\n\noutro');
+  });
+
+  test('ignores HTML fences without a body element', () {
+    final block =
+        extractFrontendHtmlBlock('```html\n<div>plain status</div>\n```');
+
+    expect(block, isNull);
+  });
+
+  test('injects mobile context and avatar compatibility helpers', () {
+    final document = buildFrontendDocument(
+      html: '<html><head></head><body>'
+          '<div class="user-avatar">{{userAvatarPath}}</div>'
+          '<div class="char-avatar">{{charAvatarPath}}</div>'
+          '</body></html>',
+      baseHref: 'http://127.0.0.1:8000',
+      context: const {
+        'character': {'avatarUrl': 'http://127.0.0.1:8000/char.png'},
+        'user': {'avatarUrl': 'http://127.0.0.1:8000/user.png'},
+      },
+    );
+
+    expect(document, contains('window.SillyTavernMobile'));
+    expect(document, contains('http://127.0.0.1:8000/char.png'));
+    expect(document, contains('http://127.0.0.1:8000/user.png'));
+    expect(document, contains('TavernFrontendHeight.postMessage'));
+    expect(document, contains('overflow-y: auto'));
+    expect(document, contains('::-webkit-scrollbar'));
+  });
+
   testWidgets('renders the mobile navigation destinations', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

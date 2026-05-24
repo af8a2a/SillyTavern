@@ -3,6 +3,8 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 
 import 'src/api.dart';
 import 'src/app_state.dart';
+import 'src/frontend_renderer.dart';
+import 'src/frontend_webview.dart';
 import 'src/models.dart';
 
 void main() {
@@ -253,7 +255,7 @@ class ChatMessageList extends StatelessWidget {
       return ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
         children: [
-          StarterCard(character: character),
+          StarterCard(state: state, character: character),
         ],
       );
     }
@@ -277,6 +279,7 @@ class ChatMessageList extends StatelessWidget {
         final messageIndex = index - (state.hasMoreBefore ? 1 : 0);
         final message = state.messages[messageIndex];
         return MessageCard(
+          state: state,
           message: message,
           index: messageIndex,
           onBranch: () => state.createBranchAt(messageIndex),
@@ -290,14 +293,18 @@ class ChatMessageList extends StatelessWidget {
 }
 
 class StarterCard extends StatelessWidget {
-  const StarterCard({required this.character, super.key});
+  const StarterCard({required this.state, required this.character, super.key});
 
+  final AppState state;
   final CharacterCard character;
 
   @override
   Widget build(BuildContext context) {
+    final frontend = extractFrontendHtmlBlock(character.firstMessage);
     final content = [
-      if (character.firstMessage.trim().isNotEmpty)
+      if (frontend?.remainingText.trim().isNotEmpty == true)
+        frontend!.remainingText.trim()
+      else if (frontend == null && character.firstMessage.trim().isNotEmpty)
         character.firstMessage.trim(),
       if (character.description.trim().isNotEmpty) character.description.trim(),
     ].join('\n\n');
@@ -315,16 +322,26 @@ class StarterCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          MarkdownBody(
-            data: content.isEmpty ? '- 当前状态：\n- 状态栏：开\n- 记忆区：开' : content,
-            selectable: true,
-            styleSheet: MarkdownStyleSheet(
-              p: const TextStyle(
-                  fontSize: 19, height: 1.55, color: Color(0xff25262b)),
-              listBullet:
-                  const TextStyle(fontSize: 19, color: Color(0xff25262b)),
+          if (frontend != null) ...[
+            FrontendHtmlView(
+              state: state,
+              character: character,
+              html: frontend.html,
+              isStarter: true,
             ),
-          ),
+            const SizedBox(height: 18),
+          ],
+          if (content.isNotEmpty || frontend == null)
+            MarkdownBody(
+              data: content.isEmpty ? '- 当前状态：\n- 状态栏：开\n- 记忆区：开' : content,
+              selectable: true,
+              styleSheet: MarkdownStyleSheet(
+                p: const TextStyle(
+                    fontSize: 19, height: 1.55, color: Color(0xff25262b)),
+                listBullet:
+                    const TextStyle(fontSize: 19, color: Color(0xff25262b)),
+              ),
+            ),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 22),
             child: Divider(thickness: 5, color: Color(0xffd8dbe0)),
@@ -366,6 +383,7 @@ class StarterCard extends StatelessWidget {
 
 class MessageCard extends StatelessWidget {
   const MessageCard({
+    required this.state,
     required this.message,
     required this.index,
     required this.onBranch,
@@ -373,6 +391,7 @@ class MessageCard extends StatelessWidget {
     super.key,
   });
 
+  final AppState state;
   final ChatMessage message;
   final int index;
   final VoidCallback onBranch;
@@ -381,6 +400,11 @@ class MessageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = message.isUser;
+    final character = state.selectedCharacter;
+    final frontend = !isUser && character != null
+        ? extractFrontendHtmlBlock(message.text)
+        : null;
+    final markdownText = frontend?.remainingText ?? message.text;
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -423,14 +447,24 @@ class MessageCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            MarkdownBody(
-              data: message.text.isEmpty ? '[空消息]' : message.text,
-              selectable: true,
-              styleSheet: MarkdownStyleSheet(
-                p: const TextStyle(
-                    fontSize: 17, height: 1.55, color: Color(0xff25262b)),
+            if (frontend != null && character != null) ...[
+              FrontendHtmlView(
+                state: state,
+                character: character,
+                html: frontend.html,
+                messageIndex: state.loadedOffset + index,
               ),
-            ),
+              if (markdownText.trim().isNotEmpty) const SizedBox(height: 12),
+            ],
+            if (frontend == null || markdownText.trim().isNotEmpty)
+              MarkdownBody(
+                data: markdownText.isEmpty ? '[空消息]' : markdownText,
+                selectable: true,
+                styleSheet: MarkdownStyleSheet(
+                  p: const TextStyle(
+                      fontSize: 17, height: 1.55, color: Color(0xff25262b)),
+                ),
+              ),
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,

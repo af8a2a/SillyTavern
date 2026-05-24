@@ -14,6 +14,9 @@ This first pass focuses on data compatibility with the existing server:
 - Test the server preset model provider from the app without sending saved
   server API keys to the device.
 - Switch character cards and edit common TavernCard front-end fields.
+- Render JS-Slash-Runner style fenced HTML frontends in assistant messages and
+  character first messages, including avatar macros and a small read-only mobile
+  bridge for loaded chat messages.
 - Manage character chat files by date and size, delete old files, and create
   branches from any loaded message.
 - Keep only small local cache values such as the backend URL, model provider,
